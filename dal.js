@@ -1,54 +1,74 @@
-const MongoClient = require('mongodb').MongoClient;
-const url = 'mongodb://localhost:27017';
+const { MongoClient } = require('mongodb');
+
+const url = process.env.MONGO_URL || 'mongodb://localhost:27017';
+const dbName = process.env.MONGO_DB_NAME || 'myproject';
+
 let db = null;
-//connects to mongo
-MongoClient.connect(url, {useUnifiedTopology: true}, function(err, client){
-    console.log('connected to db server');
-    db = client.db('myproject');
-});
+const memoryUsers = [];
 
-function create(name, email, password, balance){
-    return new Promise((resolve, reject)=> {
-        const collection = db.collection('users');
-        const doc = {name, email, password, balance};
-        collection.insertOne(doc, {w:1}, function(err,result){
-            err ? reject(err) : resolve(doc);
-        });
-    });
-}
+MongoClient.connect(url)
+  .then((client) => {
+    db = client.db(dbName);
+    console.log(`connected to db server (${dbName})`);
+  })
+  .catch((error) => {
+    console.warn(`mongodb unavailable, using in-memory store: ${error.message}`);
+  });
 
-function update(email, amount){
-    return new Promise((resolve, reject)=>{
-        const customers = db
-        .collection('users')
-        .findOneAndUpdate(
-            {email: email},
-            {$inc: {balance: amount}},
-            {returnOriginal: false},
-            function(err, documents){
-                err ? reject(err) : resolve(documents);
-            }
-        );
-    });
+function normalizeUser(doc) {
+  return {
+    ...doc,
+    balance: Number(doc.balance) || 0,
+  };
 }
 
-function all(){
-    return new Promise((resolve,reject)=>{
-        const customers = db
-        .collection('users')
-        .find({})
-        .toArray(function(err,docs){
-            err ? reject(err) : resolve(docs);
-        });
-    })
+async function create(name, email, password, balance) {
+  const user = normalizeUser({ name, email, password, balance });
+
+  if (db) {
+    const collection = db.collection('users');
+    await collection.insertOne(user);
+    return user;
+  }
+
+  memoryUsers.push(user);
+  return user;
 }
-function findOne(email){
-    return new Promise((resolve, reject)=> {
-        const customers = db
-        .collection('users')
-        .findOne({email: email})
-        .then((doc => resolve(doc)))
-        .catch((err) => reject (err))
-    })
+
+async function update(email, amount) {
+  const parsedAmount = Number(amount) || 0;
+
+  if (db) {
+    const collection = db.collection('users');
+    const result = await collection.findOneAndUpdate(
+      { email },
+      { $inc: { balance: parsedAmount } },
+      { returnDocument: 'after' }
+    );
+    return result.value;
+  }
+
+  const user = memoryUsers.find((item) => item.email === email);
+  if (!user) return null;
+
+  user.balance += parsedAmount;
+  return user;
 }
-module.exports = {create, all, update, findOne};
+
+async function all() {
+  if (db) {
+    return db.collection('users').find({}).toArray();
+  }
+
+  return memoryUsers;
+}
+
+async function findOne(email) {
+  if (db) {
+    return db.collection('users').findOne({ email });
+  }
+
+  return memoryUsers.find((user) => user.email === email) || null;
+}
+
+module.exports = { create, all, update, findOne };
