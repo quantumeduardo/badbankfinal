@@ -11,7 +11,7 @@ function Withdraw(){
         <WithdrawForm setShow={setShow} setStatus={setStatus}/> :
         <WithdrawMsg setShow={setShow} setStatus={setStatus}/>}
     />
-  )
+  );
 }
 
 function WithdrawMsg(props){
@@ -33,24 +33,29 @@ function WithdrawForm(props){
   const [amount, setAmount] = React.useState('');
 
   function handle(){
-    fetch(`/account/update/${email}/-${amount}`)
-    .then(response => response.text())
-    .then(text => {
-        try {
-            const data = JSON.parse(text);
-            props.setStatus(JSON.stringify(data.value));
-            props.setShow(false);
-            console.log('JSON:', data);
-        } catch(err) {
-            props.setStatus('Deposit failed')
-            console.log('err:', text);
+    const parsed = Number(amount);
+    if (!(parsed > 0)) {
+      props.setStatus('Enter a valid amount greater than 0');
+      return;
+    }
+
+    fetch(`/account/update/${email}/-${parsed}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.error) {
+          props.setStatus(data.error);
+          return;
         }
-    });
+
+        props.setStatus(`Balance: $${Number(data.balance) || 0}`);
+        props.setShow(false);
+      })
+      .catch(() => {
+        props.setStatus('Withdraw failed');
+      });
   }
 
-
   return(<>
-
     Email<br/>
     <input type="input" 
       className="form-control" 
@@ -67,7 +72,8 @@ function WithdrawForm(props){
 
     <button type="submit" 
       className="btn btn-light" 
-      onClick={handle}>
+      onClick={handle}
+      disabled={!email || !amount}>
         Withdraw
     </button>
 

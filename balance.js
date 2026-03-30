@@ -9,10 +9,9 @@ function Balance(){
       status={status}
       body={show ?
         <BalanceForm setShow={setShow} setStatus={setStatus}/> :
-        <BalanceMsg setShow={setShow} setStatus={setStatus}/>}
+        <BalanceMsg setShow={setShow} setStatus={setStatus}/>} 
     />
-  )
-
+  );
 }
 
 function BalanceMsg(props){
@@ -30,28 +29,25 @@ function BalanceMsg(props){
 }
 
 function BalanceForm(props){
-  const [email, setEmail]   = React.useState('');
-  const [balance, setBalance] = React.useState('');  
+  const [email, setEmail] = React.useState('');
 
   function handle(){
     fetch(`/account/findOne/${email}`)
-    .then(response => response.text())
-    .then(text => {
-        try {
-            const data = JSON.parse(text);
-            props.setStatus(text);
-            props.setShow(false);
-            setBalance(user.balance);
-            console.log('JSON:', data);
-        } catch(err) {
-            props.setStatus(text)
-            console.log('err:', text);
+      .then(response => response.json())
+      .then(data => {
+        if (data.error) {
+          props.setStatus(data.error);
+          return;
         }
-    });
+        props.setStatus(`Balance: $${Number(data.balance) || 0}`);
+        props.setShow(false);
+      })
+      .catch(error => {
+        props.setStatus(`Lookup failed: ${error.message}`);
+      });
   }
 
   return (<>
-
     Email<br/>
     <input type="input" 
       className="form-control" 
@@ -61,7 +57,8 @@ function BalanceForm(props){
 
     <button type="submit" 
       className="btn btn-light" 
-      onClick={handle}>
+      onClick={handle}
+      disabled={!email}>
         Check Balance
     </button>
 
